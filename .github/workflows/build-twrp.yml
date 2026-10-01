@@ -100,16 +100,19 @@ jobs:
           test -f device/volla/algiz/prebuilt/dtbo.img
 
       - name: Build
+        shell: bash
         run: |
-          set -euo pipefail
+          set -eo pipefail
           cd "$WS"
           export ALLOW_MISSING_DEPENDENCIES=true
           export LC_ALL=C
-          # OUT_DIR on the big disk; ccache off to keep the run reproducible.
+          # NOTE: do NOT use `set -u` here — AOSP's build/envsetup.sh references
+          # unset vars ($TOP etc.) during sourcing and would abort under nounset.
           source build/envsetup.sh
           lunch "${{ inputs.lunch_combo }}"
+          set -o pipefail
           mka "${{ inputs.build_target }}" 2>&1 | tee /mnt/twrp/build.log | \
-            grep -iE 'error:|warning: overriding|make.*Error|Install:|target .*img|Build.*complete|ninja: build' || true
+            grep -iE 'error:|warning: overriding|make.*Error|Install:|target .*img|Build.*complete|ninja: build|FAILED:' || true
           echo "=== build exit via PIPESTATUS ==="
           test "${PIPESTATUS[0]}" -eq 0
 
