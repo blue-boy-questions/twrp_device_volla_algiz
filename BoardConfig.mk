@@ -25,8 +25,12 @@ TARGET_BOARD_PLATFORM_GPU := mali-g68
 TARGET_ARCH := arm64
 TARGET_ARCH_VARIANT := armv8-2a
 TARGET_CPU_ABI := arm64-v8a
-TARGET_CPU_VARIANT := cortex-a78
-TARGET_CPU_VARIANT_RUNTIME := cortex-a78
+# D7050 is Cortex-A78 + A55, but Soong (A14 toolchain) only knows up to
+# cortex-a76 for arm64 — "cortex-a78" fails soong bootstrap with
+# 'unknown cpu variant'. a76 is the closest supported big-core variant and is
+# ABI-compatible; this only affects ART tuning, which is irrelevant for TWRP.
+TARGET_CPU_VARIANT := cortex-a76
+TARGET_CPU_VARIANT_RUNTIME := cortex-a76
 
 TARGET_2ND_ARCH := arm
 TARGET_2ND_ARCH_VARIANT := armv8-2a
@@ -34,8 +38,6 @@ TARGET_2ND_CPU_ABI := armeabi-v7a
 TARGET_2ND_CPU_ABI2 := armeabi
 TARGET_2ND_CPU_VARIANT := cortex-a55
 TARGET_2ND_CPU_VARIANT_RUNTIME := cortex-a55
-
-TARGET_USES_64_BIT_BINDER := true
 
 # -------------------------------------------------------------------- Bootloader
 TARGET_NO_BOOTLOADER := true
