@@ -38,6 +38,21 @@ jobs:
           sudo apt-get clean || true
           echo "=== AFTER ==="; df -h /
 
+      - name: Add swap (runner has only ~16GB RAM; AOSP needs more)
+        run: |
+          set -euo pipefail
+          echo "=== memory before ==="; free -h
+          # soong/ninja link steps spike RAM; a 24G swapfile on the big /mnt
+          # disk prevents the OOM kill (exit 143) seen without it.
+          sudo swapoff -a || true
+          sudo rm -f /mnt/swapfile || true
+          sudo fallocate -l 24G /mnt/swapfile
+          sudo chmod 600 /mnt/swapfile
+          sudo mkswap /mnt/swapfile
+          sudo swapon /mnt/swapfile
+          sudo sysctl vm.swappiness=100 || true
+          echo "=== memory after ==="; free -h
+
       - name: Install build dependencies
         run: |
           set -euo pipefail
@@ -137,7 +152,12 @@ jobs:
           fi
 
           set -o pipefail
-          mka "${{ inputs.build_target }}" 2>&1 | tee /mnt/twrp/build.log | \
+          # Cap parallelism: with only ~16GB RAM + swap, full -j(nproc) link
+          # steps thrash and get OOM-killed. Use a memory-aware job count.
+          jobs="$(nproc)"
+          if [ "$jobs" -gt 6 ]; then jobs=6; fi
+          echo "building with -j$jobs"
+          mka -j"$jobs" "${{ inputs.build_target }}" 2>&1 | tee /mnt/twrp/build.log | \
             grep -iE 'error:|warning: overriding|make.*Error|Install:|target .*img|Build.*complete|ninja: build|FAILED:' || true
           echo "=== build exit via PIPESTATUS ==="
           test "${PIPESTATUS[0]}" -eq 0
