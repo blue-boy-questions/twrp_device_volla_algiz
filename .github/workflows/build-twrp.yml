@@ -14,7 +14,7 @@ on:
       lunch_combo:
         description: "lunch combo (A14+ needs the release token)"
         required: true
-        default: "twrp_algiz-trunk_staging-eng"
+        default: "twrp_algiz-ap2a-eng"
 
 jobs:
   build:
@@ -121,7 +121,7 @@ jobs:
             echo "::warning::'$want' invalid; probing available release tokens"
             cat /tmp/lunch.err || true
             picked=""
-            for rel in trunk_staging trunk ap1a ap2a bp1a next; do
+            for rel in ap2a ap1a trunk_staging trunk bp1a next; do
               combo="twrp_algiz-${rel}-eng"
               if lunch "$combo" 2>/dev/null; then picked="$combo"; break; fi
             done
