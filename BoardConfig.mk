@@ -47,6 +47,11 @@ TARGET_USES_UEFI := true
 # We reuse the STOCK GKI kernel — no kernel source build for recovery.
 BOARD_PREBUILT_DTBOIMAGE := $(DEVICE_PATH)/prebuilt/dtbo.img
 TARGET_PREBUILT_KERNEL := $(DEVICE_PATH)/prebuilt/kernel.gz
+# Prebuilt device-tree blob (verbatim stock dt_table pulled out of vendor_boot).
+# vendor_boot references dtb.img separately, so provide it as a prebuilt rather
+# than embedding it in the boot image.
+BOARD_PREBUILT_DTBIMAGE := $(DEVICE_PATH)/prebuilt/dtb.img
+TARGET_PREBUILT_DTBIMAGE := $(DEVICE_PATH)/prebuilt/dtb.img
 BOARD_INCLUDE_DTB_IN_BOOTIMG := false
 
 BOARD_KERNEL_CMDLINE := bootopt=64S3,32N2,64N2 androidboot.serialconsole=0
