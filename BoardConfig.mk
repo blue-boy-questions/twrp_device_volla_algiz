@@ -77,13 +77,15 @@ BOARD_USES_RECOVERY_AS_BOOT := false
 BOARD_MOVE_RECOVERY_RESOURCES_TO_VENDOR_BOOT := true
 BOARD_USES_GENERIC_KERNEL_IMAGE := true
 
-# Two ramdisk fragments: the stock platform one, plus our recovery one.
+# Two ramdisk fragments: the stock platform one, plus the recovery one.
+# NOTE: when BOARD_INCLUDE_RECOVERY_RAMDISK_IN_VENDOR_BOOT is set, the build
+# system creates the "recovery" fragment *implicitly* — it must NOT also be
+# listed in BOARD_VENDOR_RAMDISK_FRAGMENTS (that combination is a hard error in
+# build/make/core/Makefile:339). So leave the explicit fragment list unset.
 BOARD_BOOT_HEADER_VERSION := 4
-BOARD_VENDOR_RAMDISK_FRAGMENTS := recovery
 BOARD_VENDOR_BOOT_HEADER_VERSION := 4
-# Put TWRP's ramdisk into the "recovery" vendor ramdisk fragment.
+# Put TWRP's ramdisk into the implicit "recovery" vendor ramdisk fragment.
 BOARD_INCLUDE_RECOVERY_RAMDISK_IN_VENDOR_BOOT := true
-BOARD_VENDOR_RAMDISK_FRAGMENT.recovery.KERNEL_MODULE_DIRS :=
 
 # init_boot carries the generic ramdisk on A16; keep it out of our build scope.
 BOARD_USES_GENERIC_KERNEL_IMAGE := true
