@@ -114,6 +114,33 @@ jobs:
           head -c4 device/volla/algiz/prebuilt/kernel.gz | od -An -tx1
           test -f device/volla/algiz/prebuilt/dtbo.img
 
+      - name: Patch upstream TWRP for AOSP 14 NDK suffix rename
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$WS"
+          # In Android 13+ the AIDL NDK backend dropped the "-ndk_platform"
+          # suffix; only "-ndk" is produced now. TWRP's android-14.1
+          # bootable/recovery still links against the old "<lib>-ndk_platform"
+          # names (libtar.mk, Android.mk, crypto/*), so ninja fails with
+          # 'android.security.apc-ndk_platform.so.toc ... no known rule to make
+          # it'. Rewrite the stale suffix in-tree. Idempotent and scoped to the
+          # recovery repo so it cannot touch anything else.
+          echo "=== occurrences before ==="
+          grep -rln -- '-ndk_platform' bootable/recovery | sort || true
+          # Only rename the suffix when attached to one of the AIDL libs that
+          # actually lost it; a blanket s/-ndk_platform/-ndk/ is safe here
+          # because every remaining use in bootable/recovery is such a lib.
+          grep -rl -- '-ndk_platform' bootable/recovery 2>/dev/null | while read -r f; do
+            sed -i 's/-ndk_platform/-ndk/g' "$f"
+            echo "patched: $f"
+          done
+          echo "=== occurrences after (should be none) ==="
+          if grep -rln -- '-ndk_platform' bootable/recovery; then
+            echo "::error::-ndk_platform still present after patch"; exit 1
+          fi
+          echo "clean"
+
       - name: Build
         shell: bash
         run: |
