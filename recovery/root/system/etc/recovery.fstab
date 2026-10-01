@@ -1,0 +1,46 @@
+# Volla Phone Quintus (algiz) — TWRP recovery.fstab
+# Derived from stock fstab.mt6877 (MT6877, A16, dynamic partitions, FBE v2).
+# Columns: <mount_point> <fstype> <device> [device2] [flags]
+#
+# Logical (super) partitions use the 'logical' + 'slotselect' flags so TWRP
+# resolves them through the active A/B slot and the dm-linear super map.
+
+# ------------------------------------------------------------- Logical (super)
+/system_root    ext4    system      flags=logical;slotselect;display="System";wrappedkey
+/vendor         ext4    vendor      flags=logical;slotselect;display="Vendor"
+/product        ext4    product     flags=logical;slotselect;display="Product"
+/system_ext     ext4    system_ext  flags=logical;slotselect;display="System Ext"
+/vendor_dlkm    ext4    vendor_dlkm flags=logical;slotselect;display="Vendor DLKM"
+/odm_dlkm       ext4    odm_dlkm    flags=logical;slotselect;display="ODM DLKM"
+/system_dlkm    ext4    system_dlkm flags=logical;slotselect;display="System DLKM"
+
+# ---------------------------------------------------------------- Userdata (FBE)
+# f2fs, File-Based Encryption v2 + metadata encryption.
+/data           f2fs    /dev/block/by-name/userdata     flags=fileencryption=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized;metadata_encryption=aes-256-xts:wrappedkey_v0;keydirectory=/metadata/vold/metadata_encryption;checkpoint=fs;quota;reservedsize=128M
+
+# ------------------------------------------------------------------- Metadata
+/metadata       ext4    /dev/block/by-name/metadata     flags=display="Metadata";backup=0
+
+# ---------------------------------------------------------------- Boot images
+/boot           emmc    /dev/block/by-name/boot         flags=slotselect;display="Boot";backup=1;flashimg=1
+/init_boot      emmc    /dev/block/by-name/init_boot    flags=slotselect;display="Init Boot";backup=1;flashimg=1
+/vendor_boot    emmc    /dev/block/by-name/vendor_boot  flags=slotselect;display="Vendor Boot";backup=1;flashimg=1
+/dtbo           emmc    /dev/block/by-name/dtbo         flags=slotselect;display="DTBO";backup=1;flashimg=1
+/vbmeta         emmc    /dev/block/by-name/vbmeta       flags=slotselect;display="VBMeta";backup=1;flashimg=1
+/vbmeta_system  emmc    /dev/block/by-name/vbmeta_system flags=slotselect;display="VBMeta System";backup=1;flashimg=1
+/vbmeta_vendor  emmc    /dev/block/by-name/vbmeta_vendor flags=slotselect;display="VBMeta Vendor";backup=1;flashimg=1
+
+# ------------------------------------------------------------- Modem / misc
+/modem          emmc    /dev/block/by-name/md1img       flags=slotselect;display="Modem";backup=1;flashimg=1
+/misc           emmc    /dev/block/by-name/misc         flags=display="Misc";backup=0
+
+# ------------------------------------------------------------- Vendor NV / protect
+/persist        ext4    /dev/block/by-name/persist      flags=display="Persist";backup=0;mount=0
+/nvdata         ext4    /dev/block/by-name/nvdata       flags=display="NvData";backup=0;mount=0
+/nvcfg          ext4    /dev/block/by-name/nvcfg        flags=display="NvCfg";backup=0;mount=0
+/protect_f      ext4    /dev/block/by-name/protect1     flags=display="Protect F";backup=0;mount=0
+/protect_s      ext4    /dev/block/by-name/protect2     flags=display="Protect S";backup=0;mount=0
+
+# ------------------------------------------------------------- Removable / OTG
+/external_sd    auto    /dev/block/mmcblk1p1     /dev/block/mmcblk1   flags=display="MicroSD";storage;wipeingui;removable
+/usb_otg        auto    /dev/block/sda1          /dev/block/sda       flags=display="USB OTG";storage;wipeingui;removable

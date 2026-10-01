@@ -1,0 +1,3 @@
+# Volla Phone Quintus (algiz) — recovery wipe table
+# system_root and vendor are read-only / logical; nothing extra to wipe here
+# beyond the standard data/cache. Kept minimal and correct.

@@ -1,0 +1,59 @@
+{
+  "device": "algiz",
+  "model": "Volla Phone Quintus",
+  "platform": "mt6877",
+  "soc": "MediaTek Dimensity 7050 (MT6877TT)",
+  "android": 16,
+  "security_patch": "2026-08-01",
+  "fingerprint": "volla/algiz/algiz:16/BP4A.251205.006/30-volla-16.0:user/release-keys",
+  "base_rom": "DariaOS 6 / Volla OS 16 (LineageOS-based, ro.lineage.device=algiz)",
+  "ab": true,
+  "virtual_ab": true,
+  "dynamic_partitions": true,
+  "boot": {
+    "header_version": 4,
+    "kernel_size": 14554925,
+    "ramdisk_size": 0,
+    "kernel_format": "gzip",
+    "partition_size": 41943040
+  },
+  "init_boot": {
+    "header_version": 4,
+    "kernel_size": 0,
+    "ramdisk_size": 2325283,
+    "partition_size": 8388608,
+    "note": "generic ramdisk; root (KernelSU/Magisk LKM) lives here; TWRP build does NOT touch it"
+  },
+  "vendor_boot": {
+    "header_version": 4,
+    "page_size": 4096,
+    "kernel_addr": "0x40080000",
+    "ramdisk_addr": "0x51100000",
+    "tags_addr": "0x47c80000",
+    "dtb_addr": "0x47c80000",
+    "dtb_size": 228626,
+    "partition_size": 67108864,
+    "vendor_ramdisk_table_entries": 2,
+    "fragments": [
+      { "name": "", "type": "platform", "size": 8832098 },
+      { "name": "recovery", "type": "recovery", "size": 17937941 }
+    ],
+    "note": "recovery is a vendor_boot ramdisk fragment, NOT a standalone partition. TWRP replaces the 'recovery' fragment."
+  },
+  "dtbo": { "magic": "0xd7b7ab1e", "dt_entry_count": 1, "partition_size": 8388608 },
+  "screen": { "resolution": "1080x2400", "panel": "AMOLED", "density": 477, "refresh": "120Hz" },
+  "data": {
+    "fs": "f2fs",
+    "encryption": "FBE v2 aes-256-xts + metadata encryption",
+    "keydirectory": "/metadata/vold/metadata_encryption"
+  },
+  "usb": { "vid": "18D1", "adb_pid": "D001", "fastboot_pid": "4EE0" },
+  "source_release": "https://github.com/sajjad85gh/zahedan-vollaos-rom-porter/releases/tag/stable-20260828",
+  "md5": {
+    "boot.img": "aec1fd8b4032bff8f0c843b9801045dd",
+    "init_boot.img": "8e7e50f60c514490e6d94d9757c2941e",
+    "vendor_boot.img": "32adf911d8c2e206dc389019b1007573",
+    "dtbo.img": "e9db013a065709312f9add4f2a3a06d5",
+    "vbmeta.img": "9dcbc7c6a7ee819203b20ae43e605a13"
+  }
+}
