@@ -93,8 +93,22 @@ BOARD_SUPER_PARTITION_GROUPS := mt6877_dynamic_partitions
 BOARD_MT6877_DYNAMIC_PARTITIONS_PARTITION_LIST := \
     system system_ext vendor product vendor_dlkm odm_dlkm system_dlkm
 
+# Super partition geometry. The build system requires the group *_SIZE to be
+# non-empty even for TWRP (which does not populate the logical partitions).
+# Values are sized from the stock super.img (raw 5,683,488,968 B). Virtual A/B
+# uses snapshots rather than a doubled super, so the group max is the super size
+# minus the standard 4 MiB metadata/alignment overhead. Refined from the real
+# on-device super block size if it differs.
+BOARD_SUPER_PARTITION_SIZE := 9663676416
+BOARD_MT6877_DYNAMIC_PARTITIONS_SIZE := 9659482112
+BOARD_SUPER_PARTITION_METADATA_DEVICE := super
+
 TARGET_USES_MKE2FS := true
 BOARD_USES_METADATA_PARTITION := true
+
+# Treble (stock prop ro.treble.enabled=true; silences the config.mk warning).
+PRODUCT_FULL_TREBLE_OVERRIDE := true
+BOARD_VNDK_VERSION := current
 
 # A/B
 AB_OTA_UPDATER := true
