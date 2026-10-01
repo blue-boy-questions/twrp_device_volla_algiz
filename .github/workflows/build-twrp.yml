@@ -12,9 +12,9 @@ on:
         required: true
         default: "vendorbootimage"
       lunch_combo:
-        description: "lunch combo"
+        description: "lunch combo (A14+ needs the release token)"
         required: true
-        default: "twrp_algiz-eng"
+        default: "twrp_algiz-trunk_staging-eng"
 
 jobs:
   build:
@@ -109,7 +109,33 @@ jobs:
           # NOTE: do NOT use `set -u` here — AOSP's build/envsetup.sh references
           # unset vars ($TOP etc.) during sourcing and would abort under nounset.
           source build/envsetup.sh
-          lunch "${{ inputs.lunch_combo }}"
+
+          # AOSP 14+ lunch requires a release token: <product>-<release>-<variant>.
+          # The valid release tokens come from build/release/release_configs and
+          # vary by manifest. Resolve one that actually exists instead of guessing.
+          want="${{ inputs.lunch_combo }}"
+          echo "requested lunch combo: $want"
+          if lunch "$want" 2>/tmp/lunch.err; then
+            echo "lunch OK: $want"
+          else
+            echo "::warning::'$want' invalid; probing available release tokens"
+            cat /tmp/lunch.err || true
+            picked=""
+            for rel in trunk_staging trunk ap1a ap2a bp1a next; do
+              combo="twrp_algiz-${rel}-eng"
+              if lunch "$combo" 2>/dev/null; then picked="$combo"; break; fi
+            done
+            if [ -z "$picked" ]; then
+              echo "::error::no valid release token found for twrp_algiz"
+              echo "---- list_products ----"; list_products 2>/dev/null | head || true
+              echo "---- release configs ----"
+              ls build/release/release_configs/*.textproto 2>/dev/null | sed 's#.*/##;s#\.textproto##' || true
+              ls device/volla/algiz 2>/dev/null || true
+              exit 1
+            fi
+            echo "lunch OK (fallback): $picked"
+          fi
+
           set -o pipefail
           mka "${{ inputs.build_target }}" 2>&1 | tee /mnt/twrp/build.log | \
             grep -iE 'error:|warning: overriding|make.*Error|Install:|target .*img|Build.*complete|ninja: build|FAILED:' || true
