@@ -147,11 +147,20 @@ TARGET_USES_MKE2FS := true
 # Screen: 1080x2400 AMOLED, density 477 (from ro.sf.lcd_density).
 TW_THEME := portrait_hdpi
 TW_SCREEN_BLANK_ON_BOOT := true
-TW_INPUT_BLACKLIST := "hbtp_vm"
-TW_EXTRA_LANGUAGES := true
-TW_DEFAULT_LANGUAGE := en
 
-# Encryption — FBE v2 + metadata (keydirectory=/metadata/vold/metadata_encryption)
+# ------------------------------------------------- Touchscreen / Input handling
+# Goodix GT9 series touchscreen (verified from /proc/bus/input/devices in recovery)
+# Device name: "goodix_ts" at Bus=0000 Vendor=beef Product=dead
+# Input event: event4 (ABS events for touch coordinates)
+TW_INPUT_BLACKLIST := "hbtp_vm"
+TARGET_RECOVERY_TOUCH_DEVICE := goodix_ts
+
+# Goodix touchscreen configuration (for TWRP input handling)
+# The goodix_ts device is a standard ABS touchscreen on I2C
+# TWRP's libinput/libev will automatically detect and handle it via event4
+# No additional driver compilation needed; kernel already provides the driver
+
+# ------------------------------------------------------------- Encryption — FBE v2 + metadata (keydirectory=/metadata/vold/metadata_encryption)
 TW_INCLUDE_CRYPTO := true
 TW_INCLUDE_CRYPTO_FBE := true
 TW_INCLUDE_FBE_METADATA_DECRYPT := true
