@@ -42,8 +42,6 @@ jobs:
         run: |
           set -euo pipefail
           echo "=== memory before ==="; free -h
-          # soong/ninja link steps spike RAM; a 24G swapfile on the big /mnt
-          # disk prevents the OOM kill (exit 143) seen without it.
           sudo swapoff -a || true
           sudo rm -f /mnt/swapfile || true
           sudo fallocate -l 24G /mnt/swapfile
@@ -93,8 +91,6 @@ jobs:
             -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git \
             -b "${{ inputs.manifest_branch }}" \
             --git-lfs --no-clone-bundle
-          # Sync. TWRP minimal manifests are already lean; -c keeps it to the
-          # current branch, --no-tags/--no-clone-bundle trim transfer.
           repo sync -c -j"$(nproc)" --force-sync --no-tags --no-clone-bundle \
             --optimized-fetch --prune
           echo "=== synced; disk now ==="; df -h / /mnt
@@ -104,7 +100,6 @@ jobs:
           set -euo pipefail
           cd "$WS"
           mkdir -p device/volla/algiz
-          # Copy everything except VCS / CI dirs into the device path.
           rsync -a --delete \
             --exclude '.git' --exclude '.github' \
             "$GITHUB_WORKSPACE/device_tree/" device/volla/algiz/
@@ -119,59 +114,46 @@ jobs:
         run: |
           set -euo pipefail
           cd "$WS"
-          # In Android 13+ the AIDL NDK backend dropped the "-ndk_platform"
-          # suffix; only "-ndk" is produced now. TWRP's android-14.1
-          # bootable/recovery still links against the old "<lib>-ndk_platform"
-          # names (libtar.mk, Android.mk, crypto/*), so ninja fails with
-          # 'android.security.apc-ndk_platform.so.toc ... no known rule to make
-          # it'. Rewrite the stale suffix in-tree. Idempotent and scoped to the
-          # recovery repo so it cannot touch anything else.
           echo "=== occurrences before ==="
           grep -rln -- '-ndk_platform' bootable/recovery | sort || true
-          # Only rename the suffix when attached to one of the AIDL libs that
-          # actually lost it; a blanket s/-ndk_platform/-ndk/ is safe here
-          # because every remaining use in bootable/recovery is such a lib.
           grep -rl -- '-ndk_platform' bootable/recovery 2>/dev/null | while read -r f; do
-                      sed -i 's/-ndk_platform/-ndk/g' "$f"
-                      echo "patched: $f"
-                    done || true
-                    echo "=== occurrences after (should be none) ==="
+            sed -i 's/-ndk_platform/-ndk/g' "$f"
+            echo "patched: $f"
+          done || true
+          echo "=== occurrences after (should be none) ==="
           if grep -rln -- '-ndk_platform' bootable/recovery; then
             echo "::error::-ndk_platform still present after patch"; exit 1
           fi
           echo "clean"
 
-                - name: Patch libtar.h for fscrypt v2 API (AOSP 14+ system/vold split API)
-                  shell: bash
-                  run: |
-                    set -euo pipefail
-                    cd "$WS"
-                    FILE="bootable/recovery/libtar.h"
-                    if [ -f "$FILE" ]; then
-                      echo "=== patching $FILE ==="
-                      sed -i 's/struct fscrypt_policy \*fep;/struct fscrypt_policy_v2 *fep;/g' "$FILE"
-                      sed -i 's/get_policy_size(/get_policy_v2_size(/g' "$FILE"
-                      sed -i 's/get_policy_descriptor(/get_policy_v2_descriptor(/g' "$FILE"
-                      echo "done"
-                      head -80 "$FILE" | grep -A2 -B2 "fep\|policy_v2"
-                    else
-                      echo "::warning::$FILE not found, skipping"
-                    fi
+      - name: Patch libtar.h for fscrypt v2 API (AOSP 14+ system/vold split API)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$WS"
+          FILE="bootable/recovery/libtar.h"
+          if [ -f "$FILE" ]; then
+            echo "=== patching $FILE ==="
+            sed -i 's/struct fscrypt_policy \*fep;/struct fscrypt_policy_v2 *fep;/g' "$FILE"
+            sed -i 's/get_policy_size(/get_policy_v2_size(/g' "$FILE"
+            sed -i 's/get_policy_descriptor(/get_policy_v2_descriptor(/g' "$FILE"
+            echo "done"
+            head -80 "$FILE" | grep -A2 -B2 "fep\|policy_v2"
+          else
+            echo "::warning::$FILE not found, skipping"
+          fi
 
-                - name: Build
-                  shell: bash
-                  run: |
-                    set -eo pipefail
-                    cd "$WS"
-                    export ALLOW_MISSING_DEPENDENCIES=true
-                    export LC_ALL=C
-                    # NOTE: do NOT use `set -u` here — AOSP's build/envsetup.sh references
-                    # unset vars ($TOP etc.) during sourcing and would abort under nounset.
-                    source build/envsetup.sh
+      - name: Build
+        shell: bash
+        run: |
+          set -eo pipefail
+          cd "$WS"
+          export ALLOW_MISSING_DEPENDENCIES=true
+          export LC_ALL=C
+          # NOTE: do NOT use `set -u` here — AOSP's build/envsetup.sh references
+          # unset vars ($TOP etc.) during sourcing and would abort under nounset.
+          source build/envsetup.sh
 
-          # AOSP 14+ lunch requires a release token: <product>-<release>-<variant>.
-          # The valid release tokens come from build/release/release_configs and
-          # vary by manifest. Resolve one that actually exists instead of guessing.
           want="${{ inputs.lunch_combo }}"
           echo "requested lunch combo: $want"
           if lunch "$want" 2>/tmp/lunch.err; then
@@ -218,7 +200,6 @@ jobs:
                    "$OUTDIR"/boot.img "$OUTDIR"/ramdisk-recovery.*; do
             [ -f "$f" ] && cp -v "$f" /mnt/twrp/artifacts/ || true
           done
-          # Always keep the tail of the build log for diagnosis.
           tail -c 400000 /mnt/twrp/build.log > /mnt/twrp/artifacts/build-tail.log || true
           echo "=== artifacts ==="
           ls -lh /mnt/twrp/artifacts || true
