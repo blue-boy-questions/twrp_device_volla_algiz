@@ -164,6 +164,12 @@ TARGET_RECOVERY_TOUCH_DEVICE := goodix_ts
 TW_INCLUDE_CRYPTO := true
 TW_INCLUDE_CRYPTO_FBE := true
 TW_INCLUDE_FBE_METADATA_DECRYPT := true
+# AOSP 14+ (twrp-14.1) ships system/vold with split fscrypt_policy_v1/v2 API
+# (no union fscrypt_policy + no get_policy_size/descriptor helpers).
+# TWRP's bootable/recovery libtar expects the old union API.
+# Use the v2 policy path and patch libtar.h to type the fep pointer as
+# struct fscrypt_policy_v2 * (matches SM8850 source_changes).
+TW_USE_FSCRYPT_POLICY := 2
 BOARD_USES_METADATA_PARTITION := true
 PLATFORM_SECURITY_PATCH := 2026-08-01
 PLATFORM_VERSION := 16

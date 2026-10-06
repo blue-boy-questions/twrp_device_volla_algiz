@@ -141,16 +141,33 @@ jobs:
           fi
           echo "clean"
 
-      - name: Build
-        shell: bash
-        run: |
-          set -eo pipefail
-          cd "$WS"
-          export ALLOW_MISSING_DEPENDENCIES=true
-          export LC_ALL=C
-          # NOTE: do NOT use `set -u` here — AOSP's build/envsetup.sh references
-          # unset vars ($TOP etc.) during sourcing and would abort under nounset.
-          source build/envsetup.sh
+                - name: Patch libtar.h for fscrypt v2 API (AOSP 14+ system/vold split API)
+                  shell: bash
+                  run: |
+                    set -euo pipefail
+                    cd "$WS"
+                    FILE="bootable/recovery/libtar.h"
+                    if [ -f "$FILE" ]; then
+                      echo "=== patching $FILE ==="
+                      sed -i 's/struct fscrypt_policy \*fep;/struct fscrypt_policy_v2 *fep;/g' "$FILE"
+                      sed -i 's/get_policy_size(/get_policy_v2_size(/g' "$FILE"
+                      sed -i 's/get_policy_descriptor(/get_policy_v2_descriptor(/g' "$FILE"
+                      echo "done"
+                      head -80 "$FILE" | grep -A2 -B2 "fep\|policy_v2"
+                    else
+                      echo "::warning::$FILE not found, skipping"
+                    fi
+
+                - name: Build
+                  shell: bash
+                  run: |
+                    set -eo pipefail
+                    cd "$WS"
+                    export ALLOW_MISSING_DEPENDENCIES=true
+                    export LC_ALL=C
+                    # NOTE: do NOT use `set -u` here — AOSP's build/envsetup.sh references
+                    # unset vars ($TOP etc.) during sourcing and would abort under nounset.
+                    source build/envsetup.sh
 
           # AOSP 14+ lunch requires a release token: <product>-<release>-<variant>.
           # The valid release tokens come from build/release/release_configs and
