@@ -155,6 +155,10 @@ TW_SCREEN_BLANK_ON_BOOT := true
 TW_INPUT_BLACKLIST := "hbtp_vm"
 TARGET_RECOVERY_TOUCH_DEVICE := goodix_ts
 
+# Goodix touchscreen module — lives in vendor_dlkm on stock (not in vendor_boot).
+# Must be injected into the recovery ramdisk so touch works in TWRP.
+BOARD_RECOVERY_KERNEL_MODULES := $(DEVICE_PATH)/prebuilt/modules/goodix_core.ko
+
 # Goodix touchscreen configuration (for TWRP input handling)
 # The goodix_ts device is a standard ABS touchscreen on I2C
 # TWRP's libinput/libev will automatically detect and handle it via event4
