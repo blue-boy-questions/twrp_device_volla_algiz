@@ -132,10 +132,10 @@ jobs:
           # actually lost it; a blanket s/-ndk_platform/-ndk/ is safe here
           # because every remaining use in bootable/recovery is such a lib.
           grep -rl -- '-ndk_platform' bootable/recovery 2>/dev/null | while read -r f; do
-            sed -i 's/-ndk_platform/-ndk/g' "$f"
-            echo "patched: $f"
-          done
-          echo "=== occurrences after (should be none) ==="
+                      sed -i 's/-ndk_platform/-ndk/g' "$f"
+                      echo "patched: $f"
+                    done || true
+                    echo "=== occurrences after (should be none) ==="
           if grep -rln -- '-ndk_platform' bootable/recovery; then
             echo "::error::-ndk_platform still present after patch"; exit 1
           fi
