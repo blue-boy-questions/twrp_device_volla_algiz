@@ -126,22 +126,12 @@ jobs:
           fi
           echo "clean"
 
-      - name: Patch libtar.h for fscrypt v2 API (AOSP 14+ system/vold split API)
+      - name: Patch libtar for fscrypt v2 API (committed script)
         shell: bash
         run: |
           set -euo pipefail
           cd "$WS"
-          FILE="bootable/recovery/libtar.h"
-          if [ -f "$FILE" ]; then
-            echo "=== patching $FILE ==="
-            sed -i 's/struct fscrypt_policy \*fep;/struct fscrypt_policy_v2 *fep;/g' "$FILE"
-            sed -i 's/get_policy_size(/get_policy_v2_size(/g' "$FILE"
-            sed -i 's/get_policy_descriptor(/get_policy_v2_descriptor(/g' "$FILE"
-            echo "done"
-            head -80 "$FILE" | grep -A2 -B2 "fep\|policy_v2"
-          else
-            echo "::warning::$FILE not found, skipping"
-          fi
+          python3 "$GITHUB_WORKSPACE/device_tree/patches/fix_libtar_fscrypt_v2.py" "$WS"
 
       - name: Build
         shell: bash
@@ -177,16 +167,32 @@ jobs:
             echo "lunch OK (fallback): $picked"
           fi
 
-          set -o pipefail
           # Cap parallelism: with only ~16GB RAM + swap, full -j(nproc) link
           # steps thrash and get OOM-killed. Use a memory-aware job count.
           jobs="$(nproc)"
           if [ "$jobs" -gt 6 ]; then jobs=6; fi
           echo "building with -j$jobs"
+          # Capture mka's REAL exit status. The pipeline is mka|tee|grep; grep
+          # exits 1 when it filters out everything, so we must read
+          # PIPESTATUS[0] (mka) IMMEDIATELY — before any other command runs,
+          # or it gets clobbered (this was the false-green bug).
+          set +e
           mka -j"$jobs" "${{ inputs.build_target }}" 2>&1 | tee /mnt/twrp/build.log | \
-            grep -iE 'error:|warning: overriding|make.*Error|Install:|target .*img|Build.*complete|ninja: build|FAILED:' || true
-          echo "=== build exit via PIPESTATUS ==="
-          test "${PIPESTATUS[0]}" -eq 0
+            grep -iE 'error:|warning: overriding|make.*Error|Install:|target .*img|Build.*complete|ninja: build|FAILED:'
+          rc="${PIPESTATUS[0]}"
+          set -e
+          echo "=== mka exit status: $rc ==="
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::mka failed with status $rc"
+            exit "$rc"
+          fi
+          # Real success criterion: the output image must actually exist.
+          OUT="out/target/product/algiz/vendor_boot.img"
+          if [ ! -f "$OUT" ]; then
+            echo "::error::mka returned 0 but $OUT was not produced"
+            exit 1
+          fi
+          echo "=== produced: $OUT ($(stat -c%s "$OUT") bytes) ==="
 
       - name: Collect outputs
         if: always()
