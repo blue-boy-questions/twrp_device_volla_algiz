@@ -1,35 +1,37 @@
 #!/usr/bin/env python3
-"""Fix TWRP android-14.1 libtar FBE crypto against android-14.1 system/vold.
+"""Fix TWRP android-14.1 libtar FBE crypto + link against android-14.1 system/vold.
 
-ROOT CAUSE
-  TWRP's bootable/recovery/libtar targets the OLD vold crypto API: a
-  `union fscrypt_policy` typedef plus helpers get_policy(),
-  fscrypt_policy_size(), get_policy_size(), get_policy_descriptor(),
-  get_policy_content(). TeamWin's android-14.1 system/vold DROPPED all of
-  that and now exposes only the v1/v2-overloaded fscrypt_policy_get_struct(),
-  fscrypt_policy_set_struct(), lookup_ref_key(), and a lookup_ref_tar() whose
-  signature CHANGED to take the descriptor bytes (const uint8_t*) instead of
-  the policy struct. bionic also now does `#define fscrypt_policy
-  fscrypt_policy_v1`, so the bare name can't be used as a type at all.
-  libtar uses the removed helpers in 5 files: libtar.h, block.c, append.c,
-  extract.c, output.c.
+Two coupled problems, both because android-14.1 vold diverged from what TWRP's
+libtar module was written against:
 
-FIX (shim, minimal edits)
-  Device is FBE v2 (BoardConfig TW_USE_FSCRYPT_POLICY := 2 -> USE_FSCRYPT_POLICY_V2).
-  1. Drop libtar/fscrypt_compat.h: static-inline v2 implementations of the five
-     removed helpers (ported from android-12.1 vold's v2 branches), each taking
-     `struct fscrypt_policy_v2 *`. Localises all compat logic in one file.
-  2. libtar.h: retype th_buf.fep to `struct fscrypt_policy_v2 *` and include the
-     shim right after fscrypt_policy.h.
-  3. block.c / append.c: the two malloc lines cast to the bare `fscrypt_policy`
-     (-> v1 via the bionic macro, wrong type + wrong size). Retype to v2.
-  4. extract.c: lookup_ref_tar() now wants the descriptor, not fep. Pass the
-     already-computed `descriptor` local.
-  All other call sites (get_policy*, fscrypt_policy_size, output.c LOG,
-  lookup_ref_key, fscrypt_policy_(get|set)_struct) resolve correctly once fep is
-  a v2 struct and the shim is in scope -- no edits needed there.
+(A) COMPILE: TWRP's libtar targets the OLD vold crypto API: a
+    `union fscrypt_policy` typedef plus helpers get_policy(),
+    fscrypt_policy_size(), get_policy_size(), get_policy_descriptor(),
+    get_policy_content(). android-14.1 vold DROPPED all of that and now exposes
+    only v1/v2-overloaded fscrypt_policy_get_struct(), fscrypt_policy_set_struct(),
+    lookup_ref_key(), and a lookup_ref_tar() whose signature CHANGED to take the
+    descriptor bytes (const uint8_t*) instead of the policy struct. bionic also
+    `#define fscrypt_policy fscrypt_policy_v1`, so the bare name can't be a type.
+    Used across 5 files: libtar.h, block.c, append.c, extract.c, output.c.
 
-Idempotent and loud: each edit asserts its expected occurrence count and aborts
+    Fix: device is FBE v2 (TW_USE_FSCRYPT_POLICY := 2 -> USE_FSCRYPT_POLICY_V2).
+    Drop libtar/fscrypt_compat.h: static-inline v2 implementations of the five
+    removed helpers (ported from android-12.1 vold v2 branches). Retype
+    th_buf.fep to `struct fscrypt_policy_v2 *`, include the shim from libtar.h,
+    retype the two malloc casts, and fix extract.c's lookup_ref_tar() call.
+
+(B) LINK: libtar.so (a Make module) links the Soong static lib libvold.a. Make
+    modules do NOT inherit a Soong static lib's transitive shared_libs, so the
+    objects libtar drags out of libvold.a (Decrypt.o -> VolumeManager.o,
+    Checkpoint.o) have undefined externals at libtar.so link time:
+      android::hal::BootControlClient::WaitForService()  -> libboot_control_client
+      NetlinkEvent::dump() / NetlinkEvent::findParam()    -> libsysutils
+      async_safe_format_log                               -> libasync_safe (static)
+    All three have recovery variants (libboot_control_client + libasync_safe are
+    recovery_available:true; libsysutils is force-built for recovery via TWRP's
+    TWRP_REQUIRED_MODULES). Fix: add them to libtar/Android.mk's FBE block.
+
+Idempotent and loud: every edit asserts its expected occurrence count and aborts
 on upstream drift so CI surfaces it instead of silently building broken.
 """
 import sys, os
@@ -40,6 +42,7 @@ HDR = os.path.join(LT, "libtar.h")
 BLK = os.path.join(LT, "block.c")
 APP = os.path.join(LT, "append.c")
 EXT = os.path.join(LT, "extract.c")
+MK  = os.path.join(LT, "Android.mk")
 SHIM = os.path.join(LT, "fscrypt_compat.h")
 
 SHIM_CONTENT = r'''/*
@@ -106,27 +109,33 @@ static inline void get_policy_content(struct fscrypt_policy_v2 *fep, char *conte
 
 # (file, old, new, expected_count)
 EDITS = [
+    # --- (A) compile shim ---
     (HDR,
      "#ifdef USE_FSCRYPT\n#include \"fscrypt_policy.h\"\n#endif",
      "#ifdef USE_FSCRYPT\n#include \"fscrypt_policy.h\"\n#include \"fscrypt_compat.h\"\n#endif", 1),
     (HDR,
      "\tfscrypt_policy  *fep;",
      "\tstruct fscrypt_policy_v2  *fep;", 1),
-
     (BLK,
      "t->th_buf.fep = (fscrypt_policy*)malloc(sizeof(fscrypt_policy));",
      "t->th_buf.fep = (struct fscrypt_policy_v2*)malloc(sizeof(struct fscrypt_policy_v2));", 1),
-
     (APP,
      "t->th_buf.fep = (fscrypt_policy *)malloc(sizeof(fscrypt_policy));",
      "t->th_buf.fep = (struct fscrypt_policy_v2 *)malloc(sizeof(struct fscrypt_policy_v2));", 1),
-
     (EXT,
      "if (!lookup_ref_tar(t->th_buf.fep, &binary_policy[0])) {",
      "if (!lookup_ref_tar(descriptor, &binary_policy[0])) {", 1),
+
+    # --- (B) link deps: add the libs that provide libvold.a's dragged externals ---
+    (MK,
+     "    LOCAL_STATIC_LIBRARIES += libvold libscrypt_static\n",
+     "    LOCAL_STATIC_LIBRARIES += libvold libscrypt_static libasync_safe\n", 1),
+    (MK,
+     "        libchrome \\\n        libbootloader_message \\\n        libgatekeeper_aidl\n",
+     "        libchrome \\\n        libbootloader_message \\\n        libgatekeeper_aidl \\\n        libsysutils \\\n        libboot_control_client\n", 1),
 ]
 
-for f in (HDR, BLK, APP, EXT):
+for f in (HDR, BLK, APP, EXT, MK):
     if not os.path.isfile(f):
         sys.exit(f"::error::missing source file: {f}")
 
@@ -147,7 +156,7 @@ else:
 
 # --- edits ---
 bufs = {}
-for f in (HDR, BLK, APP, EXT):
+for f in (HDR, BLK, APP, EXT, MK):
     bufs.setdefault(f, read(f))
 
 for f, old, new, want in EDITS:
@@ -163,7 +172,7 @@ for f, old, new, want in EDITS:
 for f, txt in bufs.items():
     write(f, txt)
 
-# --- structural verification (cannot compile here; runner does the real build) ---
+# --- structural verification (cannot link here; runner does the real build) ---
 errs = []
 h = read(HDR)
 if "struct fscrypt_policy_v2  *fep;" not in h:
@@ -176,14 +185,18 @@ for f in (BLK, APP):
         errs.append(f"{os.path.basename(f)}: bare fscrypt_policy malloc cast remains")
 if "lookup_ref_tar(t->th_buf.fep" in read(EXT):
     errs.append("extract.c: lookup_ref_tar still passed fep instead of descriptor")
+mk = read(MK)
+for lib in ("libasync_safe", "libsysutils", "libboot_control_client"):
+    if lib not in mk:
+        errs.append(f"Android.mk: missing link dep {lib}")
 for sym in ("get_policy_descriptor", "get_policy_size", "get_policy", "fscrypt_policy_size"):
     if sym not in read(SHIM):
         errs.append(f"fscrypt_compat.h: missing {sym}")
 
 if errs:
-    print("::error::libtar fscrypt v2 shim patch incomplete:")
+    print("::error::libtar fscrypt v2 patch incomplete:")
     for e in errs:
         print("  " + e)
     sys.exit(1)
 
-print("libtar fscrypt v2 shim patch applied cleanly")
+print("libtar fscrypt v2 + link-deps patch applied cleanly")
