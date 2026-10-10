@@ -8,22 +8,34 @@
 ---
 
 ## Current attempt
-- **Attempt:** 3
-- **Latest run id:** _pending — triggering after this commit_ (prev: 38035738536 FAILED at libtar.so LINK)
+- **Attempt:** 4
+- **Latest run id:** _pending — triggering after this commit_ (prev: 38043204749 FAILED = runner ENOSPC, NOT a code error)
 - **Branch:** main
 
 ## Latest commit / change summary
-- Attempt 3: the compile shim worked; now fix the libtar.so **LINK** stage.
-  libtar.so (a Make module) links the Soong static lib libvold.a but Make
-  modules don't inherit a Soong static lib's transitive shared_libs, so three
-  externals dragged out of libvold.a were undefined at link:
-  BootControlClient::WaitForService (libboot_control_client), NetlinkEvent::
-  dump/findParam (libsysutils), async_safe_format_log (libasync_safe).
-- `patches/fix_libtar_fscrypt_v2.py` now also edits `libtar/Android.mk`:
-  adds `libasync_safe` (static) and `libsysutils` + `libboot_control_client`
-  (shared) to the TW_INCLUDE_CRYPTO_FBE block. All three have recovery variants.
+- Attempt 4: the libtar LINK fix WORKED — the build progressed well past
+  linking into image assembly, then the **runner ran out of disk** (ENOSPC),
+  not a code error. Free more space + shrink swap.
+- `build-twrp.yml`: "Maximize build disk space" now also removes swift / node /
+  powershell / azure-cli / gcloud / mono / julia / miniconda / vcpkg / chrome /
+  pipx and purges big apt packages (frees ~10-20G more); swap moved to
+  `/swapfile` and cut 24G→16G (reclaims 8G; everything is on one /dev/root fs).
+- No source/patch change this attempt — purely the runner disk budget.
 
-## Latest REAL build error (run 38035738536 — attempt 2)
+## Latest REAL failure (run 38043204749 — attempt 3): runner ENOSPC (infra, not code)
+The libtar LINK fix compiled AND linked; the build ran 34 min into image
+assembly, then the GitHub runner itself crashed:
+```
+Unhandled exception. System.IO.IOException: No space left on device :
+  '/home/runner/actions-runner/.../Worker_...log'
+```
+Disk timeline (from attempt 2's logs; one /dev/root fs for everything):
+after cleanup 115G free → after repo sync + 24G swapfile only 9.7G free (94%)
+→ out/ ate the rest. Fix = attempt-4 disk budget (see above). This is the
+"runner out of disk" infrastructure class, but it was recurring deterministically
+so it needed a config change, not a blind rerun.
+
+## Earlier REAL build error (run 38035738536 — attempt 2)
 Attempt-2 shim fixed the COMPILE; libtar.so then failed to LINK:
 ```
 ld.lld: error: undefined symbol: android::hal::BootControlClient::WaitForService()
@@ -88,6 +100,10 @@ self-verifies after applying.
   inherit libvold's transitive shared_libs, so every external that the pulled
   libvold objects reference must be listed explicitly in libtar/Android.mk.
   Fixed in attempt 3 by adding libasync_safe/libsysutils/libboot_control_client.
+- **H4** (attempt 3, run 38043204749, commit e9ee0b36): the libtar fix was
+  CORRECT (compiled + linked); the build died from runner ENOSPC during image
+  assembly, not code. Don't "fix" code for this — it's a disk-budget problem.
+  Addressed in attempt 4 by freeing more runner disk and shrinking swap 24G→16G.
 
 ## Exact next step
 1. (done this commit) land the shim fix + state.
