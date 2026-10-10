@@ -8,19 +8,54 @@
 ---
 
 ## Current attempt
-- **Attempt:** 5
-- **Latest run id:** _pending — triggering after this commit_ (prev: 38048277769 FAILED = my attempt-4 apt purge broke dpkg; infra/self-inflicted)
+- **Attempt:** 6
+- **Latest run id:** _pending — triggering after this commit_ (prev: 38051300116 FAILED at 85% = NEW real build error: deprecated FDE identifiers in partition.cpp/partitionmanager.cpp)
 - **Branch:** main
 
-## Latest commit / change summary
-- Attempt 5: revert the attempt-4 `apt-get purge`. Removing toolchain DIRS and
-  THEN purging the owning packages left dpkg half-configured (google-cloud-cli
-  maintainer script failed on missing files), so the later `apt-get install` of
-  build deps aborted with exit 100. Keep ONLY the `rm -rf` of self-contained
-  toolchain dirs (that's where the space is); no apt purge/autoremove.
-- Swap stays 16G on `/swapfile` (attempt-4 change retained).
+## Latest REAL failure (run 38051300116 — attempt 5): deprecated FDE identifiers (real build, FIXED attempt 6)
+Attempt-5 disk/dpkg fixes WORKED: deps installed, repo synced, libtar fscrypt
+v2 patch applied, and the build ran ~60 min to 85% — past the whole libtar
+compile+link saga and well past the attempt-3 ENOSPC point. New, deeper error
+in `recovery` itself at ninja 85%:
+```
+FAILED: .../recovery_intermediates/partition.o
+bootable/recovery/partition.cpp:711:5: error: use of undeclared identifier 'set_partition_data'
+partition.cpp:712:9: error: use of undeclared identifier 'cryptfs_check_footer'
+partition.cpp:718/719: error: use of undeclared identifier 'cryptfs_get_password_type'
+partition.cpp:2163: error: use of undeclared identifier 'delete_crypto_blk_dev'
+FAILED: .../recovery_intermediates/partitionmanager.o
+partitionmanager.cpp:635:24: error: use of undeclared identifier 'cryptfs_get_password_type'
+partitionmanager.cpp:2187:13: error: use of undeclared identifier 'cryptfs_check_passwd'
+ninja: build stopped: subcommand failed.
+```
+Root cause (confirmed, not guessed): TWRP `android-14.1` partition.cpp +
+partitionmanager.cpp still call the old **FDE** (Full Disk Encryption) API —
+set_partition_data, cryptfs_check_footer, cryptfs_get_password_type,
+cryptfs_check_passwd, delete_crypto_blk_dev. android-14.1 `system/vold`
+cryptfs.h declares NONE of them (verified: it declares only
+cryptfs_setup_ext_volume + cryptfs_get_keygen). FDE was dropped industry-wide
+at Android 10 (AOSP vold commit 0803ba0 "Remove most of FDE support"). Any
+FBE-only device building with TW_INCLUDE_CRYPTO hits this. These branches are
+already runtime-dead on FBE devices (guarded by TW_IS_FBE, always true here).
 
-## Latest REAL failure (run 38043204749 — attempt 3): runner ENOSPC (infra, not code)
+## Fix applied (attempt 6)
+Apply TWRP upstream Gerrit change 8744 verbatim via a new committed, idempotent
+patch script `patches/fix_fde_removal.py` (run from the workflow right after the
+libtar patch). It removes the 5 dead FDE blocks across 2 files:
+- partition.cpp: footer-based FDE detection in the Key_Directory-empty branch
+  (now falls through to the existing "could not find crypto footer" gui_err);
+  the delete_crypto_blk_dev cleanup in the wipe path.
+- partitionmanager.cpp: the "FBE setup failed, trying FDE" fallback branch; the
+  fork()/cryptfs_check_passwd() password path in Decrypt_Device() + its
+  now-unreachable success tail.
+Script stores old/new blocks base64 (byte-exact vs current upstream), applies
+each exactly once, is idempotent (skips if already applied), aborts loudly on
+upstream drift (occurrence-count != 1), and asserts no FDE symbol remains.
+Verified locally against the real android-14.1 blobs: python-apply == `git apply`
+of the Gerrit patch; a full-tree grep of the android-14.1 recovery source
+confirms these 5 symbols appear in ONLY these 2 files (no other call sites).
+
+## Earlier REAL failure (run 38043204749 — attempt 3): runner ENOSPC (infra, not code)
 The libtar LINK fix compiled AND linked; the build ran 34 min into image
 assembly, then the GitHub runner itself crashed:
 ```
@@ -109,9 +144,15 @@ self-verifies after applying.
   with exit 100 (google-cloud-cli). Lesson: free space with `rm -rf` of the
   self-contained toolchain DIRECTORIES only; never apt-purge a package whose
   files you already rm'd. Fixed in attempt 5 (rm only, no purge/autoremove).
+- **H6** (attempt 5, run 38051300116, commit TBD): disk/dpkg fixes worked and
+  the build reached 85%, but `recovery` failed to compile — partition.cpp /
+  partitionmanager.cpp call the removed FDE API. NOT a libtar problem (that was
+  already fixed); a separate upstream/vold divergence. Fixed in attempt 6 by
+  removing the dead FDE codepaths (Gerrit 8744) via fix_fde_removal.py.
 
 ## Exact next step
-1. (done this commit) land the shim fix + state.
+1. (done this commit) land fix_fde_removal.py + wire it into the workflow after
+   the libtar patch step + update this state.
 2. Trigger `gh workflow run build-twrp.yml -R <R> --ref main` (defaults).
    Record run id here.
 3. Poll ~every 90s. On failure: `gh run view <id> --log-failed`, inspect

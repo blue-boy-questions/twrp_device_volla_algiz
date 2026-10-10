@@ -159,6 +159,13 @@ jobs:
           cd "$WS"
           python3 "$GITHUB_WORKSPACE/device_tree/patches/fix_libtar_fscrypt_v2.py" "$WS"
 
+      - name: Remove deprecated FDE codepaths (committed script)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$WS"
+          python3 "$GITHUB_WORKSPACE/device_tree/patches/fix_fde_removal.py" "$WS"
+
       - name: Build
         shell: bash
         run: |
