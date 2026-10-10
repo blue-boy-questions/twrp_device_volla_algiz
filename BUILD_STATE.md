@@ -8,19 +8,17 @@
 ---
 
 ## Current attempt
-- **Attempt:** 4
-- **Latest run id:** _pending — triggering after this commit_ (prev: 38043204749 FAILED = runner ENOSPC, NOT a code error)
+- **Attempt:** 5
+- **Latest run id:** _pending — triggering after this commit_ (prev: 38048277769 FAILED = my attempt-4 apt purge broke dpkg; infra/self-inflicted)
 - **Branch:** main
 
 ## Latest commit / change summary
-- Attempt 4: the libtar LINK fix WORKED — the build progressed well past
-  linking into image assembly, then the **runner ran out of disk** (ENOSPC),
-  not a code error. Free more space + shrink swap.
-- `build-twrp.yml`: "Maximize build disk space" now also removes swift / node /
-  powershell / azure-cli / gcloud / mono / julia / miniconda / vcpkg / chrome /
-  pipx and purges big apt packages (frees ~10-20G more); swap moved to
-  `/swapfile` and cut 24G→16G (reclaims 8G; everything is on one /dev/root fs).
-- No source/patch change this attempt — purely the runner disk budget.
+- Attempt 5: revert the attempt-4 `apt-get purge`. Removing toolchain DIRS and
+  THEN purging the owning packages left dpkg half-configured (google-cloud-cli
+  maintainer script failed on missing files), so the later `apt-get install` of
+  build deps aborted with exit 100. Keep ONLY the `rm -rf` of self-contained
+  toolchain dirs (that's where the space is); no apt purge/autoremove.
+- Swap stays 16G on `/swapfile` (attempt-4 change retained).
 
 ## Latest REAL failure (run 38043204749 — attempt 3): runner ENOSPC (infra, not code)
 The libtar LINK fix compiled AND linked; the build ran 34 min into image
@@ -104,6 +102,13 @@ self-verifies after applying.
   CORRECT (compiled + linked); the build died from runner ENOSPC during image
   assembly, not code. Don't "fix" code for this — it's a disk-budget problem.
   Addressed in attempt 4 by freeing more runner disk and shrinking swap 24G→16G.
+- **H5** (attempt 4, run 38048277769, commit bf3a436e): freed disk by `rm -rf`
+  of toolchain dirs AND `apt-get purge` of the same toolchains' packages. The
+  purge's dpkg maintainer scripts failed on the already-deleted files, leaving
+  dpkg half-broken, so the next step's `apt-get install` of build deps died
+  with exit 100 (google-cloud-cli). Lesson: free space with `rm -rf` of the
+  self-contained toolchain DIRECTORIES only; never apt-purge a package whose
+  files you already rm'd. Fixed in attempt 5 (rm only, no purge/autoremove).
 
 ## Exact next step
 1. (done this commit) land the shim fix + state.

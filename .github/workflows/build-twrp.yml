@@ -29,11 +29,16 @@ jobs:
       - name: Maximize build disk space
         run: |
           set -euo pipefail
-          echo "=== BEFORE ==="; df -h /; echo; lsblk 2>/dev/null || true; echo; free -h
-          # Aggressive reclaim of preinstalled tooling we don't use (ubuntu-24.04).
-          # The build ran out of disk at the image-packaging stage (attempt 3:
-          # runner ENOSPC); everything lives on a single /dev/root fs, so free as
-          # much as possible here.
+          echo "=== BEFORE ==="; df -h /; echo; free -h
+          # Reclaim preinstalled toolchains we don't use (ubuntu-24.04). These are
+          # self-contained directories (safe to rm) and are where the real space
+          # is — NOT apt packages. Attempt 3 died with runner ENOSPC during image
+          # assembly; everything is on one /dev/root fs.
+          #
+          # NOTE: do NOT `apt-get purge` these toolchains. Attempt 4 rm'd their
+          # dirs then purged the matching packages, whose maintainer scripts then
+          # failed on the missing files, leaving dpkg half-broken so the LATER
+          # `apt-get install` of build deps aborted (google-cloud-cli, exit 100).
           sudo rm -rf \
             /usr/share/dotnet \
             /usr/local/lib/android \
@@ -45,24 +50,13 @@ jobs:
             /usr/lib/jvm \
             /usr/share/swift \
             /usr/local/lib/node_modules \
-            /usr/local/share/chromium \
             /usr/local/share/powershell \
-            /opt/microsoft \
-            /opt/az \
-            /usr/lib/google-cloud-sdk \
-            /usr/lib/mono \
-            /usr/local/julia* \
-            /opt/google/chrome \
-            /opt/pipx \
-            /usr/local/share/vcpkg \
             /usr/share/miniconda \
+            /usr/local/share/vcpkg \
+            /opt/microsoft \
+            /opt/pipx \
+            /usr/local/julia* \
             "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}" || true
-          # Purge a few big apt packages (safe; AOSP ships its own clang/jdk).
-          sudo apt-get purge -y -qq \
-            '^aspnetcore-.*' '^dotnet-.*' '^llvm-.*' '^mongodb-.*' \
-            azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable \
-            firefox powershell mono-devel 2>/dev/null || true
-          sudo apt-get autoremove -y -qq || true
           sudo docker image prune --all --force || true
           sudo apt-get clean || true
           echo "=== AFTER ==="; df -h /
